@@ -13,7 +13,7 @@
 - Custom beat detection and note spawning algorithms
 - State management system for game flow
 
-## Build With
+## Built With
 - Unity 2022.3.44f1
 - C#
 - Visual Studio
