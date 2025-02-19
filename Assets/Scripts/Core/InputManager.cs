@@ -8,17 +8,35 @@ namespace SimpleRhythmGame.Core
 {
     public class InputManager : MonoBehaviour
     {
-        [Header("Timing Windows")]
-        [SerializeField] private float  m_fPerfectWindow = 20f;
-        [SerializeField] private float  m_fGoodWindow = 100f;
+        private float                   m_fPerfectWindow;
+        private float                   m_fGoodWindow;
 
         private GameManager             m_gameManager;
         private float                   m_fLaneWidth;
+
+        public static InputManager Instance { get; private set; }
+
+        private void Awake()
+        {
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+
+            Instance = this;
+        }
 
         private void Start()
         {
             m_gameManager = GameManager.Instance;
             m_fLaneWidth = Screen.width / m_gameManager.NumberOfLanes;
+        }
+
+        public void Initialize(float perfectWindow, float goodWindow)
+        {
+            m_fPerfectWindow = perfectWindow;
+            m_fGoodWindow = goodWindow;
         }
 
         private void Update()
@@ -40,7 +58,13 @@ namespace SimpleRhythmGame.Core
 
         private void HandleTouch(float xPos)
         {
-            int lane = Mathf.FloorToInt(xPos / m_fLaneWidth);        
+            int lane = Mathf.FloorToInt(xPos / m_fLaneWidth);
+            if (lane < 0 || lane >= m_gameManager.NumberOfLanes)
+            {
+                Debug.LogWarning($"Invalid lane index: {lane}");
+                return;
+            }
+
             CheckHit(lane);
         }
 
@@ -55,6 +79,8 @@ namespace SimpleRhythmGame.Core
             float noteY = closestNote.GetComponent<RectTransform>().anchoredPosition.y;
             float hitLineY = m_gameManager.HitLineY;
             float distance = Mathf.Abs(noteY - hitLineY);
+
+            Debug.Log($"[HIT DETECTION] Lane: {lane} | Note Y: {noteY} | Hit Line Y: {hitLineY} | Distance: {distance}");
 
             if (distance <= m_fPerfectWindow)
             {

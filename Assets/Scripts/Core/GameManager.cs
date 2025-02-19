@@ -9,29 +9,29 @@ namespace SimpleRhythmGame.Core
 {
     public class GameManager : MonoBehaviour
     {
-        [Header("Game Settings")]
-        private int                                     m_iNumberOfLanes = 4;
-        private float                                   m_fNoteSpeed = 500f;
+        public delegate void ScoreUpdateHandler(int score, int combo);
+        public event ScoreUpdateHandler OnScoreUpdated;
 
-        [Header("References")]
-        [SerializeField] private RectTransform          m_noteContainer;
-        [SerializeField] private RectTransform          m_hitLine;
-        [SerializeField] private GameObject             m_notePrefab;
-        [SerializeField] private GameObject             m_hitEffectPrefab;
-        [SerializeField] private TextMeshProUGUI        m_scoreText;
-        [SerializeField] private TextMeshProUGUI        m_comboText;
+        private RectTransform                   m_noteContainer;
+        private RectTransform                   m_hitLine;
+        private GameObject                      m_notePrefab;
+        private GameObject                      m_hitEffectPrefab;
+        private int                             m_iCurrentBeatIndex = 0;
 
-        private float[]                                 m_fLaneXPositions;
-        private int                                     m_iScore;
-        private int                                     m_iCombo;
-        private int                                     m_iMaxCombo = 0;
-        private float                                   m_fTopOfScreen;
-        private float                                   m_fBottomOfScreen;
-        private float                                   m_fScreenOffset = 100f;
+        private int                             m_iNumberOfLanes;
+        private float                           m_fNoteSpeed;
 
-        private int                                     m_iPerfectHits = 0;
-        private int                                     m_iGoodHits = 0;
-        private int                                     m_iMisses = 0;
+        private float[]                         m_fLaneXPositions;
+        private int                             m_iScore;
+        private int                             m_iCombo;
+        private int                             m_iMaxCombo = 0;
+        private float                           m_fTopOfScreen;
+        private float                           m_fBottomOfScreen;
+        private float                           m_fScreenOffset = 100f;
+
+        private int                             m_iPerfectHits = 0;
+        private int                             m_iGoodHits = 0;
+        private int                             m_iMisses = 0;
 
         public static GameManager Instance { get; private set; }
 
@@ -39,7 +39,7 @@ namespace SimpleRhythmGame.Core
         public float[] LaneXPositions => m_fLaneXPositions;
         public GameObject HitEffectPrefab => m_hitEffectPrefab;
         public RectTransform NoteContainer => m_noteContainer;
-        public float HitLineY => m_hitLine.anchoredPosition.y;
+        public float HitLineY { get; private set; }
         public float NoteSpeed => m_fNoteSpeed;
         public int NumberOfLanes => m_iNumberOfLanes;
         public float BottomOfScreen => m_fBottomOfScreen;
@@ -62,20 +62,61 @@ namespace SimpleRhythmGame.Core
             Instance = this;
         }
 
-        private void Start()
+        public void Initialize(int numberOfLanes, float noteSpeed, RectTransform hitLine, RectTransform noteContainer, GameObject notePrefab, GameObject hitEffectPrefab)
         {
+            m_iNumberOfLanes = numberOfLanes;
+            m_fNoteSpeed = noteSpeed;
+            m_hitLine = hitLine;
+            m_noteContainer = noteContainer;
+            m_notePrefab = notePrefab;
+            m_hitEffectPrefab = hitEffectPrefab;
             CalculateLanePositions();
             m_fTopOfScreen = GetScreenTop() + m_fScreenOffset;
             m_fBottomOfScreen = GetScreenBottom();
-            UpdateUI();
+            HitLineY = m_fBottomOfScreen + m_hitLine.anchoredPosition.y;
         }
 
-        private void Update()
+        public void StartGame()
         {
-            if (Input.GetKeyDown(KeyCode.Space))
+            Debug.Log("GameManager: Starting game...");
+
+            ResetGame();
+
+            if (AudioManager.Instance != null)
             {
-                SpawnNote(Random.Range(0, m_iNumberOfLanes));
+                AudioManager.Instance.PlaySong();
+                StartCoroutine(SpawnNotes());
             }
+        }
+
+        private IEnumerator SpawnNotes()
+        {
+            float beatInterval = 60f / AudioManager.Instance.BPM;
+            float noteTravelTime = HitLineY / m_fNoteSpeed;
+
+            foreach (float beatTime in AudioManager.Instance.BeatTimestamps)
+            {
+                float spawnTime = beatTime - noteTravelTime;
+
+                while (AudioManager.Instance.AudioSource.time < spawnTime)
+                {
+                    yield return null;
+                }
+
+                int lane = Random.Range(0, m_iNumberOfLanes);
+                SpawnNote(lane);
+            }
+        }
+
+        public void SpawnNote(int lane)
+        {
+            GameObject note = Instantiate(m_notePrefab, m_noteContainer);
+            RectTransform noteRect = note.GetComponent<RectTransform>();
+            noteRect.anchoredPosition = new Vector2(m_fLaneXPositions[lane], m_fTopOfScreen);
+
+            // Set values to spawned note
+            Note spawnedNote = note.GetComponent<Note>();
+            spawnedNote.Initialize(m_fNoteSpeed, lane);
         }
 
         private void CalculateLanePositions()
@@ -102,17 +143,6 @@ namespace SimpleRhythmGame.Core
         private float GetScreenBottom()
         {
             return -Screen.height * 0.5f;
-        }
-
-        public void SpawnNote(int lane)
-        {
-            GameObject note = Instantiate(m_notePrefab, m_noteContainer);
-            RectTransform noteRect = note.GetComponent<RectTransform>();
-            noteRect.anchoredPosition = new Vector2(m_fLaneXPositions[lane], m_fTopOfScreen);
-
-            // Set values to spawned note
-            Note spawnedNote = note.GetComponent<Note>();
-            spawnedNote.Initialize(m_fNoteSpeed, lane);
         }
 
         public Note GetClosestNoteInLane(int lane)
@@ -165,16 +195,14 @@ namespace SimpleRhythmGame.Core
                 m_iGoodHits++;
                 m_iScore += 50;
             }
-
             m_iCombo++;
-            UpdateUI();
+            OnScoreUpdated?.Invoke(m_iScore, m_iCombo);
         }
 
         public void HandleNoteMiss(int lane)
         {
             m_iMisses++;
             m_iCombo = 0;
-            UpdateUI();
 
             Note closestNote = GetClosestNoteInLane(lane);
             if (closestNote != null)
@@ -192,13 +220,13 @@ namespace SimpleRhythmGame.Core
             m_iPerfectHits = 0;
             m_iGoodHits = 0;
             m_iMisses = 0;
-            UpdateUI();
-        }
 
-        private void UpdateUI()
-        {
-            m_scoreText.text = m_iScore.ToString("D6");
-            m_comboText.text = m_iCombo > 1 ? $"{m_iCombo} COMBO!" : "";
+            foreach (Transform child in m_noteContainer)
+            {
+                Destroy(child.gameObject);
+            }
+
+            OnScoreUpdated?.Invoke(m_iScore, m_iCombo);
         }
     }
 }
