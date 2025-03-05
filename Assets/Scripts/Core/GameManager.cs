@@ -73,7 +73,32 @@ namespace SimpleRhythmGame.Core
             CalculateLanePositions();
             m_fTopOfScreen = GetScreenTop() + m_fScreenOffset;
             m_fBottomOfScreen = GetScreenBottom();
-            HitLineY = m_fBottomOfScreen + m_hitLine.anchoredPosition.y;
+
+            Canvas parentCanvas = m_hitLine.GetComponentInParent<Canvas>();
+            float screenHeight = Screen.height;
+            float targetDistance = screenHeight * 0.2f;
+            if (parentCanvas && parentCanvas.renderMode == RenderMode.ScreenSpaceOverlay)
+            {
+                float hitLinePosition = -screenHeight / 2 + targetDistance;
+                HitLineY = hitLinePosition;
+
+                Vector2 newPosition = m_hitLine.anchoredPosition;
+                newPosition.y = hitLinePosition;
+                m_hitLine.anchoredPosition = newPosition;
+            }
+
+            else
+            {
+                Vector2 screenPosition = RectTransformUtility.WorldToScreenPoint(Camera.main, m_hitLine.position);
+                Vector2 localPosition;
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    m_noteContainer, screenPosition, parentCanvas.worldCamera, out localPosition 
+                    );
+
+                Vector2 newPosition = m_hitLine.anchoredPosition;
+                newPosition.y = localPosition.y;
+                m_hitLine.anchoredPosition = newPosition;
+            }
         }
 
         public void StartGame()
